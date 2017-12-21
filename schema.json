@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "title": "Aircraft",
+  "type": "object",
+  "properties": {
+    "icao": {
+      "description": "unique id for aircraft",
+      "type": "number"
+    },
+    "count": {
+      "description": "total number of messages recieved",
+      "type": "number"
+    },
+    "callsign": {
+      "type": "string"
+    },
+    "location": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "heading": {
+            "type": ["number", "null"]
+          },
+          "speed": {
+            "type": ["number", "null"]
+          },
+          "altitude": {
+            "type": ["number", "null"]
+          },
+          "timestamp": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}
