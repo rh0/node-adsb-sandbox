@@ -1,16 +1,19 @@
-var rtlsdr = require('rtl-sdr'),
-    Demodulator = require('mode-s-demodulator'),
-    Table = require('cli-table2'),
-    figlet = require('figlet');
+const rtlsdr = require('rtl-sdr'),
+      Demodulator = require('mode-s-demodulator'),
+      AircraftStore = require('mode-s-aircraft-store'),
+      Table = require('cli-table2'),
+      figlet = require('figlet');
 
+// Setup the table
 var table = new Table({
-  head: ['icao', 'identity', 'callsign', 'lat', 'lon', 'Alti'],
+  head: ['icao', 'callsign', 'lat', 'lon', 'speed', 'Alti'],
   style: {
     border: []
   },
-  colWidths: [10, 10, 10, 10, 10, 10]
+  colWidths: [10, 10, 20, 20, 10, 10]
 });
 
+// 1337 ASCII
 var titleGraphic = '';
 figlet.text('ADSB Node', {
   font: 'Bloody',
@@ -20,6 +23,10 @@ figlet.text('ADSB Node', {
   titleGraphic = data;
 });
 
+const store = new AircraftStore({
+  timeout: 120000 // 2 mins
+});
+
 const deviceIndex = 0,
       autoGain = false,
       findMaxGain = true,
@@ -27,8 +34,6 @@ const deviceIndex = 0,
       agcMode = true,
       freq = 1090e6,
       sampleRate = 2e6;
-
-let gain = 0;
 
 const vendor = Buffer.alloc(256),
       product = Buffer.alloc(256),
@@ -54,6 +59,7 @@ if(typeof dev === 'number') {
 
 console.log('Provisioning Radio...');
 // Set Max Gain
+let gain = 0;
 rtlsdr.set_tuner_gain_mode(dev, 1);
 if(!autoGain) {
   if(findMaxGain) {
@@ -92,42 +98,39 @@ const bufNum = 12;
 const bufLen = 2 ** 18; // 256K
 rtlsdr.read_async(dev, onData, onEnd, bufNum, bufLen);
 
+// Populate our aircraft store.
 function onData (data, size) {
   demodulator.process(data, size, function(message) {
-    //console.log(message);
-    if(message.rawLatitude !== null) {
-      var isNewAircraft = true;
-      table.forEach(function(x,i,table) {
-        if(x.indexOf(message.icao) === 0) {
-          isNewAircraft = false;
-          table[i] = [message.icao,
-                      message.identity,
-                      message.callsign,
-                      message.rawLatitude,
-                      message.rawLongitude,
-                      message.altitude];
-        }
-      });
-      if(isNewAircraft === true) {
-        table.push([message.icao,
-                    message.identity,
-                    message.callsign,
-                    message.rawLatitude,
-                    message.rawLongitude,
-                    message.altitude]);
-      }
-      console.log('\033[2J');
-      console.log(titleGraphic);
-      console.log('\n');
-      console.log('Flights Within Range of %s', rtlsdr.get_device_name(0));
-      console.log(table.toString());
-      //console.log('ICAO: %s Callsign: %s Lat/Lon: %d/%d Alti: %d', message.icao, message.callsign, message.rawLatitude, message.rawLongitude, message.altitude);
-    }
+    store.addMessage(message);
   });
 }
+
+// Update the output every now and then.
+var outputInterval = setInterval(function() {
+  // Clear the table
+  table.splice(0, table.length);
+
+  // Loop through our aircraft store and output aircraft that have position data
+  store.getAircrafts()
+  .filter(function(aircraft) {
+    return aircraft.lat;
+  })
+  .forEach(function(aircraft) {
+    table.push([aircraft.icao,
+                aircraft.callsign,
+                aircraft.lat,
+                aircraft.lng,
+                Math.round(aircraft.speed),
+                aircraft.altitude]);
+  });
+
+  console.log('\033[2J');
+  console.log(titleGraphic);
+  console.log('\n');
+  console.log('Flights Within Range of %s', rtlsdr.get_device_name(0));
+  console.log(table.toString());
+}, 1000);
 
 function onEnd() {
   console.log('onEnd');
 }
-
-
